@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualiseur PDF Interactif</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="viewer-container">
+        <button id="prev" class="nav-btn nav-btn-left" aria-label="Page précédente">
+            <i class="fas fa-chevron-left"></i>
+        </button>
+        
+        <div class="book-container">
+            <div class="book">
+                <div id="pdf-container"></div>
+            </div>
+            <div id="page-num" class="page-indicator"></div>
+        </div>
+
+        <button id="next" class="nav-btn nav-btn-right" aria-label="Page suivante">
+            <i class="fas fa-chevron-right"></i>
+        </button>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        let pdfDoc = null;
+        let pageNum = 1;
+        let pageRendering = false;
+        let pageNumPending = null;
+        let lastRenderTime = 0;
+        let isTransitioning = false;
+        const TRANSITION_DELAY = 300; // Durée de la transition en ms
+        const RENDER_COOLDOWN = 250; // Temps minimum entre deux rendus
+        const container = document.getElementById('pdf-container');
+
+        function getOptimalScale() {
+            const viewerContainer = document.querySelector('.book');
+            const viewerWidth = viewerContainer.clientWidth - 40;
+            const viewerHeight = viewerContainer.clientHeight - 40;
+            return Math.min(viewerWidth / 595.276, viewerHeight / 841.890);
+        }
+
+        async function loadPDF() {
+            try {
+                const loadingTask = pdfjsLib.getDocument('e-2.pdf');
+                pdfDoc = await loadingTask.promise;
+                document.getElementById('page-num').textContent = `${pageNum} / ${pdfDoc.numPages}`;
+                renderPage(pageNum);
+            } catch (error) {
+                console.error('Erreur lors du chargement du PDF:', error);
+                alert('Erreur lors du chargement du PDF. Vérifiez que le fichier existe et est accessible.');
+            }
+        }
+
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        async function renderPage(num) {
+            if (isTransitioning) {
+                pageNumPending = num;
+                return;
+            }
+
+            const now = Date.now();
+            if (now - lastRenderTime < RENDER_COOLDOWN) {
+                pageNumPending = num;
+                setTimeout(() => {
+                    if (pageNumPending !== null) {
+                        const pendingNum = pageNumPending;
+                        pageNumPending = null;
+                        renderPage(pendingNum);
+                    }
+                }, RENDER_COOLDOWN);
+                return;
+            }
+
+            pageRendering = true;
+            isTransitioning = true;
+            lastRenderTime = now;
+
+            try {
+                const page = await pdfDoc.getPage(num);
+                const scale = getOptimalScale();
+                const viewport = page.getViewport({ scale });
+
+                const canvas = document.createElement('canvas');
+                canvas.className = 'pdf-page';
+                canvas.style.maxWidth = '100%';
+                canvas.style.height = 'auto';
+                
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport,
+                    enableWebGL: true
+                };
+
+                await page.render(renderContext).promise;
+
+                const newCanvas = canvas.cloneNode(true);
+                newCanvas.getContext('2d').drawImage(canvas, 0, 0);
+                
+                if (container.children.length > 0) {
+                    const oldCanvas = container.children[0];
+                    container.appendChild(newCanvas);
+                    
+                    if (num > pageNum) {
+                        oldCanvas.classList.add('slide-out-left');
+                        newCanvas.classList.add('slide-in-right');
+                    } else {
+                        oldCanvas.classList.add('slide-out-right');
+                        newCanvas.classList.add('slide-in-left');
+                    }
+                    
+                    await new Promise(resolve => setTimeout(resolve, TRANSITION_DELAY));
+                    container.removeChild(oldCanvas);
+                    newCanvas.classList.remove('slide-in-left', 'slide-in-right');
+                } else {
+                    container.appendChild(newCanvas);
+                }
+            } catch (error) {
+                console.error('Erreur lors du rendu de la page:', error);
+            } finally {
+                pageRendering = false;
+                isTransitioning = false;
+                
+                if (pageNumPending !== null) {
+                    const pendingNum = pageNumPending;
+                    pageNumPending = null;
+                    renderPage(pendingNum);
+                }
+            }
+        }
+
+        const debouncedRenderPage = debounce((num) => {
+            if (!pageRendering) {
+                renderPage(num);
+            } else {
+                pageNumPending = num;
+            }
+        }, 50);
+
+        function updatePageNum(newPageNum) {
+            if (newPageNum < 1 || newPageNum > pdfDoc.numPages || newPageNum === pageNum) return;
+            pageNum = newPageNum;
+            document.getElementById('page-num').textContent = `${pageNum} / ${pdfDoc.numPages}`;
+            debouncedRenderPage(pageNum);
+        }
+
+        function onPrevPage() {
+            if (pageNum <= 1) return;
+            updatePageNum(pageNum - 1);
+        }
+
+        function onNextPage() {
+            if (pageNum >= pdfDoc.numPages) return;
+            updatePageNum(pageNum + 1);
+        }
+
+        // Désactiver les boutons pendant la transition
+        function toggleButtons(disabled) {
+            document.getElementById('prev').disabled = disabled;
+            document.getElementById('next').disabled = disabled;
+        }
+
+        const prevButton = document.getElementById('prev');
+        const nextButton = document.getElementById('next');
+
+        prevButton.addEventListener('click', () => {
+            if (!isTransitioning) {
+                onPrevPage();
+            }
+        });
+
+        nextButton.addEventListener('click', () => {
+            if (!isTransitioning) {
+                onNextPage();
+            }
+        });
+
+        // Gestion du redimensionnement avec debounce
+        const debouncedResize = debounce(() => {
+            if (!pageRendering && !isTransitioning) {
+                renderPage(pageNum);
+            }
+        }, 250);
+
+        window.addEventListener('resize', debouncedResize);
+
+        // Ajout des raccourcis clavier avec debounce
+        const debouncedKeyHandler = debounce((e) => {
+            if (!isTransitioning) {
+                if (e.key === 'ArrowLeft') {
+                    onPrevPage();
+                } else if (e.key === 'ArrowRight') {
+                    onNextPage();
+                }
+            }
+        }, 50);
+
+        document.addEventListener('keydown', debouncedKeyHandler);
+
+        window.addEventListener('load', loadPDF);
+    </script>
+</body>
+</html>
