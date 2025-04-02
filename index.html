@@ -48,7 +48,7 @@
 
         async function loadPDF() {
             try {
-                const loadingTask = pdfjsLib.getDocument('e-2.pdf');
+                const loadingTask = pdfjsLib.getDocument('journal.pdf');
                 pdfDoc = await loadingTask.promise;
                 document.getElementById('page-num').textContent = `${pageNum} / ${pdfDoc.numPages}`;
                 renderPage(pageNum);
