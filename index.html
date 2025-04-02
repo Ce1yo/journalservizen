@@ -48,13 +48,51 @@
 
         async function loadPDF() {
             try {
-                const loadingTask = pdfjsLib.getDocument('e.pdf');
-                pdfDoc = await loadingTask.promise;
-                document.getElementById('page-num').textContent = `${pageNum} / ${pdfDoc.numPages}`;
-                renderPage(pageNum);
+                const pdfPath = './journal.pdf';
+                console.log('Tentative de chargement du PDF depuis:', window.location.href, pdfPath);
+                
+                // Vérifier si nous sommes sur un protocole HTTP/HTTPS
+                if (window.location.protocol === 'file:') {
+                    throw new Error('Le fichier HTML doit être servi via un serveur HTTP (pas en ouvrant directement le fichier)');
+                }
+
+                // Première étape : vérifier que le fichier est accessible
+                try {
+                    const response = await fetch(pdfPath);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const blob = await response.blob();
+                    if (blob.size === 0) {
+                        throw new Error('Le fichier PDF est vide');
+                    }
+                    console.log('Taille du fichier PDF:', blob.size, 'bytes');
+                    
+                    // Charger le PDF depuis le blob
+                    const loadingTask = pdfjsLib.getDocument({
+                        data: await blob.arrayBuffer(),
+                        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdfjs-dist/3.11.174/cmaps/',
+                        cMapPacked: true,
+                    });
+                    
+                    pdfDoc = await loadingTask.promise;
+                    document.getElementById('page-num').textContent = `${pageNum} / ${pdfDoc.numPages}`;
+                    renderPage(pageNum);
+                } catch (fetchError) {
+                    throw new Error(`Erreur lors de l'accès au fichier: ${fetchError.message}`);
+                }
             } catch (error) {
-                console.error('Erreur lors du chargement du PDF:', error);
-                alert('Erreur lors du chargement du PDF. Vérifiez que le fichier existe et est accessible.');
+                console.error('Erreur détaillée lors du chargement du PDF:', error);
+                const errorMessage = document.createElement('div');
+                errorMessage.style.color = 'red';
+                errorMessage.style.padding = '20px';
+                errorMessage.style.textAlign = 'center';
+                errorMessage.innerHTML = `Impossible de charger le PDF.<br>Erreur détaillée: ${error.message}<br><br>
+                    Vérifications à faire:<br>
+                    1. Le fichier 'journal.pdf' existe-t-il dans le répertoire?<br>
+                    2. Le fichier n'est-il pas corrompu?<br>
+                    3. Avez-vous les permissions pour lire le fichier?`;
+                document.getElementById('pdf-container').appendChild(errorMessage);
             }
         }
 
