@@ -43,7 +43,11 @@
             const viewerContainer = document.querySelector('.book');
             const viewerWidth = viewerContainer.clientWidth - 40;
             const viewerHeight = viewerContainer.clientHeight - 40;
-            return Math.min(viewerWidth / 595.276, viewerHeight / 841.890);
+            // Calculer l'échelle de base pour maintenir les proportions
+            const baseScale = Math.min(viewerWidth / 595.276, viewerHeight / 841.890);
+            // Ajouter un multiplicateur de qualité tout en préservant les proportions
+            const qualityMultiplier = 2.0;
+            return baseScale * qualityMultiplier;
         }
 
         async function loadPDF() {
@@ -138,17 +142,31 @@
 
                 const canvas = document.createElement('canvas');
                 canvas.className = 'pdf-page';
-                canvas.style.maxWidth = '100%';
-                canvas.style.height = 'auto';
+                
+                // Utiliser un ratio de pixels plus élevé pour les écrans haute résolution
+                const pixelRatio = window.devicePixelRatio || 1;
+                const scaledWidth = viewport.width * pixelRatio;
+                const scaledHeight = viewport.height * pixelRatio;
+                
+                // Conserver les proportions avec max-width et max-height
+                canvas.style.width = '100%';
+                canvas.style.height = '100%';
+                canvas.style.maxWidth = viewport.width / 2 + 'px'; // Diviser par 2 car on utilise un qualityMultiplier de 2
+                canvas.style.maxHeight = viewport.height / 2 + 'px';
+                canvas.style.objectFit = 'contain';
+                
+                canvas.width = scaledWidth;
+                canvas.height = scaledHeight;
                 
                 const context = canvas.getContext('2d');
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-
+                context.scale(pixelRatio, pixelRatio);
+                
                 const renderContext = {
                     canvasContext: context,
                     viewport: viewport,
-                    enableWebGL: true
+                    enableWebGL: true,
+                    renderInteractiveForms: true,
+                    antialiasing: true
                 };
 
                 await page.render(renderContext).promise;
