@@ -37,9 +37,15 @@
         }
         .newsletter-form {
             display: flex;
+            flex-direction: column;
             max-width: 500px;
             margin: 0 auto;
             gap: 10px;
+        }
+        @media (min-width: 640px) {
+            .newsletter-form {
+                flex-direction: row;
+            }
         }
         .newsletter-form input[type="email"] {
             flex: 1;
@@ -62,6 +68,12 @@
             font-size: 16px;
             cursor: pointer;
             transition: background-color 0.3s;
+            width: 100%;
+        }
+        @media (min-width: 640px) {
+            .newsletter-form button {
+                width: auto;
+            }
         }
         .newsletter-form button:hover {
             background-color: #0056b3;
@@ -112,7 +124,7 @@
                     })
                     .then(response => {
                         if (response.ok) {
-                            alert('Merci de votre inscription ! Vous recevrez bientôt nos prochains journaux.');
+                            alert('Merci pour votre inscription ! Vous recevrez bientôt nos prochains journaux.');
                             form.reset();
                         } else {
                             throw new Error('Une erreur est survenue.');
