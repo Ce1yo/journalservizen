@@ -3,278 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualiseur PDF Interactif</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
+    <title>Journal Servizen</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .viewer-container {
+            width: 100%;
+            margin: 20px 0;
+        }
+    </style>
 </head>
 <body>
-    <div class="viewer-container">
-        <button id="prev" class="nav-btn nav-btn-left" aria-label="Page précédente">
-            <i class="fas fa-chevron-left"></i>
-        </button>
-        
-        <div class="book-container">
-            <div class="book">
-                <div id="pdf-container"></div>
-            </div>
-            <div id="page-num" class="page-indicator"></div>
+    <div class="container">
+        <div class="viewer-container">
+            <iframe 
+                src="https://player.flipsnack.com?hash=QTZDRTY1ODhCN0ErN25hYm1wa3Z4bg==" 
+                width="100%" 
+                height="480" 
+                seamless="seamless" 
+                scrolling="no" 
+                frameBorder="0" 
+                allowFullScreen 
+                allow="autoplay; clipboard-read; clipboard-write">
+            </iframe>
         </div>
-
-        <button id="next" class="nav-btn nav-btn-right" aria-label="Page suivante">
-            <i class="fas fa-chevron-right"></i>
-        </button>
     </div>
-
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-        let pdfDoc = null;
-        let pageNum = 1;
-        let pageRendering = false;
-        let pageNumPending = null;
-        let lastRenderTime = 0;
-        let isTransitioning = false;
-        const TRANSITION_DELAY = 300; // Durée de la transition en ms
-        const RENDER_COOLDOWN = 250; // Temps minimum entre deux rendus
-        const container = document.getElementById('pdf-container');
-
-        function getOptimalScale() {
-            const viewerContainer = document.querySelector('.book');
-            const viewerWidth = viewerContainer.clientWidth - 40;
-            const viewerHeight = viewerContainer.clientHeight - 40;
-            // Calculer l'échelle de base pour maintenir les proportions
-            const baseScale = Math.min(viewerWidth / 595.276, viewerHeight / 841.890);
-            // Ajouter un multiplicateur de qualité tout en préservant les proportions
-            const qualityMultiplier = 2.0;
-            return baseScale * qualityMultiplier;
-        }
-
-        async function loadPDF() {
-            try {
-                const pdfPath = './journalservizen.pdf';
-                console.log('Tentative de chargement du PDF depuis:', window.location.href, pdfPath);
-                
-                // Vérifier si nous sommes sur un protocole HTTP/HTTPS
-                if (window.location.protocol === 'file:') {
-                    throw new Error('Le fichier HTML doit être servi via un serveur HTTP (pas en ouvrant directement le fichier)');
-                }
-
-                // Première étape : vérifier que le fichier est accessible
-                try {
-                    const response = await fetch(pdfPath);
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    const blob = await response.blob();
-                    if (blob.size === 0) {
-                        throw new Error('Le fichier PDF est vide');
-                    }
-                    console.log('Taille du fichier PDF:', blob.size, 'bytes');
-                    
-                    // Charger le PDF depuis le blob
-                    const loadingTask = pdfjsLib.getDocument({
-                        data: await blob.arrayBuffer(),
-                        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdfjs-dist/3.11.174/cmaps/',
-                        cMapPacked: true,
-                    });
-                    
-                    pdfDoc = await loadingTask.promise;
-                    document.getElementById('page-num').textContent = `${pageNum} / ${pdfDoc.numPages}`;
-                    renderPage(pageNum);
-                } catch (fetchError) {
-                    throw new Error(`Erreur lors de l'accès au fichier: ${fetchError.message}`);
-                }
-            } catch (error) {
-                console.error('Erreur détaillée lors du chargement du PDF:', error);
-                const errorMessage = document.createElement('div');
-                errorMessage.style.color = 'red';
-                errorMessage.style.padding = '20px';
-                errorMessage.style.textAlign = 'center';
-                errorMessage.innerHTML = `Impossible de charger le PDF.<br>Erreur détaillée: ${error.message}<br><br>
-                    Vérifications à faire:<br>
-                    1. Le fichier 'journal.pdf' existe-t-il dans le répertoire?<br>
-                    2. Le fichier n'est-il pas corrompu?<br>
-                    3. Avez-vous les permissions pour lire le fichier?`;
-                document.getElementById('pdf-container').appendChild(errorMessage);
-            }
-        }
-
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
-        }
-
-        async function renderPage(num) {
-            if (isTransitioning) {
-                pageNumPending = num;
-                return;
-            }
-
-            const now = Date.now();
-            if (now - lastRenderTime < RENDER_COOLDOWN) {
-                pageNumPending = num;
-                setTimeout(() => {
-                    if (pageNumPending !== null) {
-                        const pendingNum = pageNumPending;
-                        pageNumPending = null;
-                        renderPage(pendingNum);
-                    }
-                }, RENDER_COOLDOWN);
-                return;
-            }
-
-            pageRendering = true;
-            isTransitioning = true;
-            lastRenderTime = now;
-
-            try {
-                const page = await pdfDoc.getPage(num);
-                const scale = getOptimalScale();
-                const viewport = page.getViewport({ scale });
-
-                const canvas = document.createElement('canvas');
-                canvas.className = 'pdf-page';
-                
-                // Utiliser un ratio de pixels plus élevé pour les écrans haute résolution
-                const pixelRatio = window.devicePixelRatio || 1;
-                const scaledWidth = viewport.width * pixelRatio;
-                const scaledHeight = viewport.height * pixelRatio;
-                
-                // Conserver les proportions avec max-width et max-height
-                canvas.style.width = '100%';
-                canvas.style.height = '100%';
-                canvas.style.maxWidth = viewport.width / 2 + 'px'; // Diviser par 2 car on utilise un qualityMultiplier de 2
-                canvas.style.maxHeight = viewport.height / 2 + 'px';
-                canvas.style.objectFit = 'contain';
-                
-                canvas.width = scaledWidth;
-                canvas.height = scaledHeight;
-                
-                const context = canvas.getContext('2d');
-                context.scale(pixelRatio, pixelRatio);
-                
-                const renderContext = {
-                    canvasContext: context,
-                    viewport: viewport,
-                    enableWebGL: true,
-                    renderInteractiveForms: true,
-                    antialiasing: true
-                };
-
-                await page.render(renderContext).promise;
-
-                const newCanvas = canvas.cloneNode(true);
-                newCanvas.getContext('2d').drawImage(canvas, 0, 0);
-                
-                if (container.children.length > 0) {
-                    const oldCanvas = container.children[0];
-                    container.appendChild(newCanvas);
-                    
-                    if (num > pageNum) {
-                        oldCanvas.classList.add('slide-out-left');
-                        newCanvas.classList.add('slide-in-right');
-                    } else {
-                        oldCanvas.classList.add('slide-out-right');
-                        newCanvas.classList.add('slide-in-left');
-                    }
-                    
-                    await new Promise(resolve => setTimeout(resolve, TRANSITION_DELAY));
-                    container.removeChild(oldCanvas);
-                    newCanvas.classList.remove('slide-in-left', 'slide-in-right');
-                } else {
-                    container.appendChild(newCanvas);
-                }
-            } catch (error) {
-                console.error('Erreur lors du rendu de la page:', error);
-            } finally {
-                pageRendering = false;
-                isTransitioning = false;
-                
-                if (pageNumPending !== null) {
-                    const pendingNum = pageNumPending;
-                    pageNumPending = null;
-                    renderPage(pendingNum);
-                }
-            }
-        }
-
-        const debouncedRenderPage = debounce((num) => {
-            if (!pageRendering) {
-                renderPage(num);
-            } else {
-                pageNumPending = num;
-            }
-        }, 50);
-
-        function updatePageNum(newPageNum) {
-            if (newPageNum < 1 || newPageNum > pdfDoc.numPages || newPageNum === pageNum) return;
-            pageNum = newPageNum;
-            document.getElementById('page-num').textContent = `${pageNum} / ${pdfDoc.numPages}`;
-            debouncedRenderPage(pageNum);
-        }
-
-        function onPrevPage() {
-            if (pageNum <= 1) return;
-            updatePageNum(pageNum - 1);
-        }
-
-        function onNextPage() {
-            if (pageNum >= pdfDoc.numPages) return;
-            updatePageNum(pageNum + 1);
-        }
-
-        // Désactiver les boutons pendant la transition
-        function toggleButtons(disabled) {
-            document.getElementById('prev').disabled = disabled;
-            document.getElementById('next').disabled = disabled;
-        }
-
-        const prevButton = document.getElementById('prev');
-        const nextButton = document.getElementById('next');
-
-        prevButton.addEventListener('click', () => {
-            if (!isTransitioning) {
-                onPrevPage();
-            }
-        });
-
-        nextButton.addEventListener('click', () => {
-            if (!isTransitioning) {
-                onNextPage();
-            }
-        });
-
-        // Gestion du redimensionnement avec debounce
-        const debouncedResize = debounce(() => {
-            if (!pageRendering && !isTransitioning) {
-                renderPage(pageNum);
-            }
-        }, 250);
-
-        window.addEventListener('resize', debouncedResize);
-
-        // Ajout des raccourcis clavier avec debounce
-        const debouncedKeyHandler = debounce((e) => {
-            if (!isTransitioning) {
-                if (e.key === 'ArrowLeft') {
-                    onPrevPage();
-                } else if (e.key === 'ArrowRight') {
-                    onNextPage();
-                }
-            }
-        }, 50);
-
-        document.addEventListener('keydown', debouncedKeyHandler);
-
-        window.addEventListener('load', loadPDF);
-    </script>
 </body>
 </html>
