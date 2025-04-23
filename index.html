@@ -23,6 +23,49 @@
             width: 100%;
             margin: 20px 0;
         }
+        .newsletter-section {
+            margin: 40px 0 20px;
+            text-align: center;
+            padding: 30px;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+        }
+        .newsletter-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        .newsletter-form {
+            display: flex;
+            max-width: 500px;
+            margin: 0 auto;
+            gap: 10px;
+        }
+        .newsletter-form input[type="email"] {
+            flex: 1;
+            padding: 12px 15px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .newsletter-form input[type="email"]:focus {
+            border-color: #007bff;
+        }
+        .newsletter-form button {
+            padding: 12px 25px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .newsletter-form button:hover {
+            background-color: #0056b3;
+        }
     </style>
 </head>
 <body>
@@ -38,6 +81,49 @@
                 allowFullScreen 
                 allow="autoplay; clipboard-read; clipboard-write">
             </iframe>
+        </div>
+        <div class="newsletter-section">
+            <h2>Recevoir les prochains journaux</h2>
+            <form class="newsletter-form" action="https://formspree.io/f/xnndqvka" method="POST">
+                <input type="email" name="email" placeholder="Votre adresse e-mail" required>
+                <button type="submit">S'abonner</button>
+            </form>
+            <script>
+                const form = document.querySelector('.newsletter-form');
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const email = form.querySelector('input[type="email"]').value;
+                    
+                    // Enregistrer dans localStorage
+                    let emails = JSON.parse(localStorage.getItem('newsletter_emails') || '[]');
+                    if (!emails.includes(email)) {
+                        emails.push(email);
+                        localStorage.setItem('newsletter_emails', JSON.stringify(emails));
+                    }
+                    
+                    // Envoyer à Formspree
+                    fetch(form.action, {
+                        method: 'POST',
+                        body: JSON.stringify({ email: email }),
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        }
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            alert('Merci de votre inscription ! Vous recevrez bientôt nos prochains journaux.');
+                            form.reset();
+                        } else {
+                            throw new Error('Une erreur est survenue.');
+                        }
+                    })
+                    .catch(error => {
+                        alert('Désolé, une erreur est survenue. Veuillez réessayer plus tard.');
+                        console.error(error);
+                    });
+                });
+            </script>
         </div>
     </div>
 </body>
